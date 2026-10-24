@@ -1,0 +1,62 @@
+import streamlit as st
+from pathlib import Path
+import sys
+
+# src 폴더를 경로에 추가하여 main_pipeline 임포트 가능하도록 설정
+ROOT_DIR = Path(__file__).resolve().parent.parent
+sys.path.append(str(ROOT_DIR / "src"))
+
+from main_pipeline import generate_fast_track_report, infer_hsk_and_get_details, lookup_tariff_by_hsk, search_legal_rag
+
+st.set_page_config(
+    page_title="R&D Fast-Track 통관 및 인증 에이전트",
+    page_icon="🚀",
+    layout="wide"
+)
+
+st.title("🚀 R&D 패스트트랙 통관 및 인증 에이전트")
+st.markdown("소규모 하드웨어 스타트업 및 연구개발(R&D) 목적의 시제품 수입을 위한 **HSK 추론, 관세율 조회, KC 인증 면제 사유서 자동 생성** 솔루션입니다.")
+
+# 사이드바 설정
+st.sidebar.header("📌 데모 안내")
+st.sidebar.markdown("""
+- **지원 대상 품목군**:
+  * 제84류: 태블릿 PC 등 자동자료처리기계
+  * 제85류: 무선통신모듈, 리튬이온 배터리, MCU 칩
+- **주요 기능**:
+  1. 자연어 기반 의도 분류 및 HSK 추론
+  2. 로컬 관세율표(CSV) 기반 세액 산출
+  3. ChromaDB RAG 기반 법령 인용 사유서 작성
+  4. 워드(`.docx`) 및 마크다운(`.md`) 자동 저장
+""")
+
+# 사용자 입력 폼
+query = st.text_area(
+    "수입하고자 하는 품목과 연구개발 목적을 자유롭게 입력해 주세요:",
+    value="연구개발 목적으로 중국에서 안드로이드 태블릿 PC 프로토타입 5대를 들여올 예정이야. 관세율과 KC 인증 면제 조건 알려줘.",
+    height=100
+)
+
+if st.button("🔍 통관 및 인증 분석 실행", type="primary"):
+    if not query.strip():
+        st.warning("질문을 입력해 주세요.")
+    else:
+        with st.spinner("AI 에이전트가 통관 규정 및 관세율을 분석하고 있습니다..."):
+            # 분석 결과 생성 및 파일 저장 수행
+            analysis = infer_hsk_and_get_details(query)
+            
+            if analysis["intent"] != "customs_and_certification":
+                st.error(f"입력하신 질문은 수입 통관 및 인증 대상이 아닙니다. (사유: {analysis['reason']})")
+            else:
+                # 리포트 실행
+                report_markdown = generate_fast_track_report(query)
+                
+                st.success("✅ 분석 및 문서 생성이 완료되었습니다!")
+                
+                # 화면에 마크다운 리포트 렌더링
+                st.markdown("---")
+                st.markdown(report_markdown)
+                
+                # 가장 최근 생성된 파일 경로 찾기 안내
+                output_dir = ROOT_DIR / "output"
+                st.info(f"📂 생성된 마크다운 및 워드(.docx) 파일은 프로젝트 내 `output/` 폴더에 안전하게 저장되었습니다.")

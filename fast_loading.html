@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>R&amp;D Fast-Track Agent 시작 중…</title>
+<!-- run_fast.bat 이 .run_cache/port.js 에 window.APP_PORT=포트번호; 를 적어 둔다. 없으면 8501 -->
+<script src=".run_cache/port.js"></script>
+<style>
+  :root { --bg:#f6f8fb; --fg:#1d2733; --muted:#5b6876; --accent:#2f6fed; --card:#ffffff; --line:#dfe5ec; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14181d; --fg:#e8edf2; --muted:#9aa7b4; --accent:#6c9cff; --card:#1c222a; --line:#2c3541; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--fg);
+         font-family: "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; }
+  .card { width: min(92vw, 440px); padding: 36px 32px; text-align: center; background: var(--card);
+          border: 1px solid var(--line); border-radius: 14px; }
+  .spinner { width: 40px; height: 40px; margin: 0 auto 20px; border: 4px solid var(--line);
+             border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  h1 { margin: 0 0 10px; font-size: 19px; font-weight: 600; line-height: 1.4; }
+  p { margin: 6px 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+  .btn { display: inline-block; margin-top: 14px; padding: 9px 20px; border-radius: 8px; background: var(--accent);
+         color: #fff; text-decoration: none; font-size: 14px; }
+  .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="spinner" aria-hidden="true"></div>
+  <h1>R&amp;D 패스트트랙 에이전트를 시작하고 있습니다</h1>
+  <p id="msg" role="status">서버가 준비되면 자동으로 앱 화면으로 이동합니다.</p>
+  <p><span id="sec">0</span>초 경과</p>
+  <a id="open" class="btn" href="#">지금 열기</a>
+</main>
+<script>
+(function () {
+  var port = window.APP_PORT || 8501;
+  var base = 'http://127.0.0.1:' + port;
+  var started = Date.now();
+  var done = false;
+
+  document.getElementById('open').href = base + '/';
+
+  function go() {
+    if (done) { return; }
+    done = true;
+    location.replace(base + '/');
+  }
+
+  // 서버가 어떤 응답이든 돌려주면 준비된 것으로 본다. fetch 와 이미지 요청 두 가지로 확인한다.
+  function probe() {
+    if (done) { return; }
+    try {
+      fetch(base + '/_stcore/health', { mode: 'no-cors', cache: 'no-store' }).then(go, function () {});
+    } catch (e) { /* 무시하고 다음 확인 때 다시 시도 */ }
+    var img = new Image();
+    img.onload = go;
+    img.src = base + '/favicon.png?t=' + Date.now();
+  }
+
+  setInterval(probe, 400);
+  probe();
+
+  setInterval(function () {
+    var s = Math.floor((Date.now() - started) / 1000);
+    document.getElementById('sec').textContent = s;
+    if (s >= 20) {
+      document.getElementById('msg').textContent =
+        '평소보다 오래 걸리고 있습니다. 시작 창(검은 화면)의 오류 메시지를 확인하세요. 서버가 이미 떠 있다면 지금 열기를 누르세요.';
+    }
+  }, 500);
+})();
+</script>
+</body>
+</html>

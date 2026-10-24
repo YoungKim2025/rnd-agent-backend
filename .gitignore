@@ -1,0 +1,21 @@
+# Security
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Local Test Outputs & Archives
+output/
+archive/
+vector_store.tmp/
+vector_store.old/
+
+# OS Files
+.DS_Store
+# Local Test Scripts & Documents (업로드 제외)
+*.bat
+*.ps1
+*.docx
+평가_SET_사용안내.md
+CHANGES2.md
