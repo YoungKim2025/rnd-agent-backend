@@ -22,7 +22,7 @@ STAGE_LABELS = {
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 st.set_page_config(
-    page_title="R&D 패스트트랙 통관 및 인증 에이전트",
+    page_title="R&D 패스트트랙 AI AGENT",
     page_icon="🚀",
     layout="wide",
 )
