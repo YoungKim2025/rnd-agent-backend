@@ -57,12 +57,38 @@ if st.sidebar.button("🧹 에러 캐시 및 세션 초기화"):
     st.success("캐시와 세션이 초기화되었습니다. 다시 시도해 주세요.")
     st.rerun()
 
+# ── 메인 화면 입력부 수정 부분 ──────────────────────────────────────────────
 query = st.text_area(
     "수입하고자 하는 품목과 연구개발 목적, 수량, 단가를 자유롭게 입력해 주세요:",
     value="연구개발 목적으로 리튬이온 배터리 프로토타입 100개를 수입하려고 해. 개당 가격은 5천원이고 인증은 아직 없어. 전안법 면제 조건과 관세율 알려줘.",
     height=200,
 )
 
+# 💡 신규: 모바일에서도 쉽게 누를 수 있도록 메인 화면에 버튼 배치 (2분할 컬럼)
+col_btn1, col_btn2 = st.columns([3, 1])
+with col_btn1:
+    run_clicked = st.button("🔍 통관 및 인증 분석 실행", type="primary", use_container_width=True)
+with col_btn2:
+    if st.button("🧹 캐시·세션 초기화", use_container_width=True):
+        import shutil
+        cache_dir = ROOT_DIR.parent / "cache"
+        if cache_dir.exists():
+            for f in cache_dir.glob("*.json"):
+                try:
+                    f.unlink()
+                except Exception:
+                    pass
+        st.session_state.clear()
+        st.success("캐시와 세션이 초기화되었습니다!")
+        st.rerun()
+
+if run_clicked:
+    if not query.strip():
+        st.warning("질문을 입력해 주세요.")
+    else:
+        with st.spinner("AI 에이전트가 캐시 및 규정을 검토하여 분석을 진행하고 있습니다..."):
+            from pipeline_runner import run_pipeline
+            st.session_state["result"] = run_pipeline(query, use_template=use_template)
 
 def _show_meta(result: dict) -> None:
     route = result.get("route") or {}
