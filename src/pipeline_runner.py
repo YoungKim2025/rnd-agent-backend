@@ -1,4 +1,4 @@
-"""R&D 패스트트랙 통합 실행기 (LLM 1회 호출 최적화 및 템플릿 모드 적용)"""
+"""R&D 패스트트랙 통합 실행기 (에러 캐시 원천 차단 및 불량 캐시 자동 삭제 적용)"""
 import hashlib
 import json
 import logging
@@ -36,7 +36,10 @@ def _fail(stage: str, message: str, status: str = "error", **extra) -> dict:
 
 
 def _save_cache(path: Path, data: dict):
-    """성공 여부와 관계없이 모든 결과를 캐싱하여 중복 호출 원천 차단"""
+    """성공한 결과(status == 'success')일 때만 최종적으로 캐시를 저장"""
+    if data.get("status") != "success":
+        return
+        
     try:
         path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     except Exception as e:
@@ -84,7 +87,6 @@ def run_pipeline(query: str, use_template: bool = True) -> dict:
         try:
             cached_data = json.loads(cache_file.read_text(encoding="utf-8"))
             
-            # --- 캐시 히트 시 파일 유실 검사 및 자동 복구 (성공 건만) ---
             if cached_data.get("status") == "success":
                 md_path = Path(cached_data.get("md_path", ""))
                 docx_path = Path(cached_data.get("docx_path", ""))
@@ -104,32 +106,33 @@ def run_pipeline(query: str, use_template: bool = True) -> dict:
                         doc.save(docx_path)
                     except Exception as e:
                         logger.warning(f"DOCX 복구 실패: {e}")
-            
-            logger.info("캐시된 응답을 반환합니다.")
-            return cached_data
+                
+                logger.info("캐시된 성공 응답을 반환합니다.")
+                return cached_data
+            else:
+                # 💡 실패한 옛날 캐시 파일이 발견되면 즉시 삭제 처리
+                logger.info("에러가 기록된 기존 캐시를 발견하여 완전히 삭제 후 새로 시도합니다.")
+                if cache_file.exists():
+                    cache_file.unlink()
         except Exception as e:
-            logger.warning(f"캐시 읽기/복구 실패: {e}")
+            logger.warning(f"캐시 읽기 실패로 불량 파일을 삭제합니다: {e}")
+            if cache_file.exists():
+                cache_file.unlink()
 
-    # ── 1. 규칙 검사를 최상단으로 이동 (거절 사유 즉시 차단, LLM 0회) ──
+    # ── 1. 규칙 검사를 최상단으로 이동 (거절 사유 즉시 차단, 불필요한 캐시 저장 없음) ──
     purpose = rl.detect_purpose(text)
     if purpose == "commercial":
-        res = _fail("input", "상업적 판매 목적의 수입은 R&D 패스트트랙 지원 대상이 아닙니다.")
-        _save_cache(cache_file, res)
-        return res
+        return _fail("input", "상업적 판매 목적의 수입은 R&D 패스트트랙 지원 대상이 아닙니다.")
 
     qty = rl.extract_quantity(text)
     if qty is None:
-        res = _fail("input", "수입 수량을 파악할 수 없습니다. 정확한 수량을 포함해 다시 질문해 주세요.")
-        _save_cache(cache_file, res)
-        return res
+        return _fail("input", "수입 수량을 파악할 수 없습니다. 정확한 수량을 포함해 다시 질문해 주세요.")
 
     price_info = rl.extract_unit_price(text, qty)
     if price_info.get("status") == "foreign":
-        res = _fail("input", "외화 단가는 지원하지 않습니다. 원화(KRW) 기준으로 입력해 주세요.")
-        _save_cache(cache_file, res)
-        return res
+        return _fail("input", "외화 단가는 지원하지 않습니다. 원화(KRW) 기준으로 입력해 주세요.")
 
-    # ── 2. 의도 분류 규칙 우선 판단 (정상 쿼리 시 라우터 생략, LLM 1회 감소) ──
+    # ── 2. 의도 분류 규칙 우선 판단 ──
     if purpose == "research" and qty is not None:
         route_info = {
             "category": CUSTOMS,
@@ -157,27 +160,19 @@ def run_pipeline(query: str, use_template: bool = True) -> dict:
         }
 
     if route_info["category"] == LAB_SAFETY:
-        res = _fail("router", "연구실 안전 문의는 아직 지원하지 않습니다(Phase 2 예정).", status="unsupported", route=route_info)
-        _save_cache(cache_file, res)
-        return res
+        return _fail("router", "연구실 안전 문의는 아직 지원하지 않습니다(Phase 2 예정).", status="unsupported", route=route_info)
     if route_info["category"] != CUSTOMS:
-        res = _fail("router", "수입 통관·인증과 관련된 질문이 아닙니다.", status="unsupported", route=route_info)
-        _save_cache(cache_file, res)
-        return res
+        return _fail("router", "수입 통관·인증과 관련된 질문이 아닙니다.", status="unsupported", route=route_info)
 
-    # ── 3. HSK 추론 (필수 LLM 1회 호출) ──
+    # ── 3. HSK 추론 ──
     infer = infer_hsk_code(text)
     if not isinstance(infer, dict) or infer.get("status") != "success":
         message = infer.get("message") if isinstance(infer, dict) else None
-        res = _fail("hsk", message or "HSK 추론에 실패했습니다.", route=route_info)
-        _save_cache(cache_file, res)
-        return res
+        return _fail("hsk", message or "HSK 추론에 실패했습니다.", route=route_info)
 
     data = infer.get("data")
     if not isinstance(data, dict):
-        res = _fail("hsk", "HSK 추론 결과 형식이 올바르지 않습니다.", route=route_info)
-        _save_cache(cache_file, res)
-        return res
+        return _fail("hsk", "HSK 추론 결과 형식이 올바르지 않습니다.", route=route_info)
 
     hsk_code = str(data.get("hsk_code") or "").strip()
     inference_info = {
@@ -188,14 +183,11 @@ def run_pipeline(query: str, use_template: bool = True) -> dict:
     }
     if not hsk_code:
         reason = data.get("reason") or "근거 없음"
-        res = _fail("hsk", f"지원 대상 품목을 특정하지 못했습니다. (사유: {reason})", route=route_info, inference=inference_info)
-        _save_cache(cache_file, res)
-        return res
+        return _fail("hsk", f"지원 대상 품목을 특정하지 못했습니다. (사유: {reason})", route=route_info, inference=inference_info)
 
-    # ── 4. 사유서 템플릿 모드 (보고서 생성 단계의 LLM 생략, 1회 감소) ──
+    # ── 4. 사유서 템플릿 모드 및 보고서 생성 ──
     try:
         if use_template:
-            # 외부 로직 수정 없이 API 함수를 임시 우회하여 고정 템플릿 반환
             original_generate = config.generate_text
             config.generate_text = lambda prompt: "본 물품은 연구개발용 시제품으로, 상업적 유통을 금지하며 사후 추적 관리를 성실히 이행할 것을 서약합니다."
             report = generate_fast_track_report(text, hsk_hint=hsk_code)
@@ -204,20 +196,16 @@ def run_pipeline(query: str, use_template: bool = True) -> dict:
             report = generate_fast_track_report(text, hsk_hint=hsk_code)
     except Exception as e:
         logger.exception("보고서 생성 실패")
-        res = _fail("report", f"보고서 생성 중 오류가 발생했습니다 ({type(e).__name__}).", route=route_info, inference=inference_info)
-        _save_cache(cache_file, res)
-        return res
+        return _fail("report", f"보고서 생성 중 오류가 발생했습니다 ({type(e).__name__}).", route=route_info, inference=inference_info)
 
     if not isinstance(report, dict) or report.get("status") != "success":
         message = report.get("message") if isinstance(report, dict) else None
-        res = _fail("report", message or "보고서를 생성하지 못했습니다.", route=route_info, inference=inference_info)
-        _save_cache(cache_file, res)
-        return res
+        return _fail("report", message or "보고서를 생성하지 못했습니다.", route=route_info, inference=inference_info)
 
     result = dict(report)
     result.update({"stage": "done", "route": route_info, "inference": inference_info})
     
-    # ── 정상 결과 최종 캐싱 ──
+    # ── 정상 결과 최종 캐싱 (여기서 단 한 번만 수행) ──
     _save_cache(cache_file, result)
 
     return result
