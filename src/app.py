@@ -22,12 +22,12 @@ st.set_page_config(
     layout="wide",
 )
 
-title_col1, title_col2 = st.columns([1, 15])
+title_col1, title_col2 = st.columns([1.5, 10])
 with title_col1:
-    st.image(str(ROOT_DIR / "AI_Agent_icon.png"), width=45)
+    st.image(str(ROOT_DIR / "AI_Agent_icon.png"), width=70)
 with title_col2:
     st.header("R&D 패스트트랙 AI AGENT")
-    
+
 st.markdown(
     "소규모 하드웨어 스타트업 및 연구개발(R&D) 목적의 시제품 수입을 위한 "
     "**HSK 추론, 관세율 조회, KC 인증 면제 사유서 자동 생성** 솔루션입니다."
