@@ -78,10 +78,17 @@ def run_pipeline(query: str, use_template: bool = True) -> dict:
     logic_hash = _get_logic_hash()
     csv_hash = _get_csv_hash()
     
-    # 템플릿 사용 여부도 캐시 키에 반영
+    # 기존 코드
     cache_raw = f"{text}|{model_name}|{logic_hash}|{csv_hash}|tmpl={use_template}"
     query_hash = hashlib.md5(cache_raw.encode('utf-8')).hexdigest()
     cache_file = CACHE_DIR / f"cache_{query_hash}.json"
+
+    # 💡 디버깅용 출력 코드 (여기에 추가)
+    print("\n" + "="*50)
+    print(f"[디버그] PC에 저장된 원본 해시: e0f3814a121ab458421f3f5e4d6384ea")
+    print(f"[디버그] 모바일이 요청한 해시: {query_hash}")
+    print(f"[디버그] 해시 생성 원본 문자열: {cache_raw}")
+    print("="*50 + "\n")
 
     if cache_file.exists():
         try:
