@@ -1,4 +1,4 @@
-"""Streamlit 화면 (모바일 안정성 강화 및 에러 캐시 자동 갱신 버전)"""
+"""Streamlit 화면 (모바일 최적화 및 중복 버튼 제거 최종본)"""
 import sys
 from pathlib import Path
 
@@ -43,7 +43,6 @@ use_template = st.sidebar.checkbox(
     value=True
 )
 
-# 💡 모바일 환경 대응: 캐시 강제 무효화 버튼 추가
 if st.sidebar.button("🧹 에러 캐시 및 세션 초기화"):
     import shutil
     cache_dir = ROOT_DIR.parent / "cache"
@@ -57,19 +56,19 @@ if st.sidebar.button("🧹 에러 캐시 및 세션 초기화"):
     st.success("캐시와 세션이 초기화되었습니다. 다시 시도해 주세요.")
     st.rerun()
 
-# ── 메인 화면 입력부 수정 부분 ──────────────────────────────────────────────
+# ── 메인 화면 입력부 ──────────────────────────────────────────────────────
 query = st.text_area(
     "수입하고자 하는 품목과 연구개발 목적, 수량, 단가를 자유롭게 입력해 주세요:",
     value="연구개발 목적으로 리튬이온 배터리 프로토타입 100개를 수입하려고 해. 개당 가격은 5천원이고 인증은 아직 없어. 전안법 면제 조건과 관세율 알려줘.",
     height=200,
 )
 
-# 💡 신규: 모바일에서도 쉽게 누를 수 있도록 메인 화면에 버튼 배치 (2분할 컬럼)
+# ── 메인 실행 및 초기화 버튼 (나란히 배치) ──────────────────────────────────
 col_btn1, col_btn2 = st.columns([3, 1])
 with col_btn1:
     run_clicked = st.button("🔍 통관 및 인증 분석 실행", type="primary", use_container_width=True)
 with col_btn2:
-    if st.button("🧹 캐시·세션 초기화", use_container_width=True):
+    if st.button("🧹 캐시 초기화", use_container_width=True):
         import shutil
         cache_dir = ROOT_DIR.parent / "cache"
         if cache_dir.exists():
@@ -82,6 +81,7 @@ with col_btn2:
         st.success("캐시와 세션이 초기화되었습니다!")
         st.rerun()
 
+# ── 실행 로직 (중복 제거 완료) ───────────────────────────────────────────
 if run_clicked:
     if not query.strip():
         st.warning("질문을 입력해 주세요.")
@@ -89,6 +89,7 @@ if run_clicked:
         with st.spinner("AI 에이전트가 캐시 및 규정을 검토하여 분석을 진행하고 있습니다..."):
             from pipeline_runner import run_pipeline
             st.session_state["result"] = run_pipeline(query, use_template=use_template)
+
 
 def _show_meta(result: dict) -> None:
     route = result.get("route") or {}
@@ -128,14 +129,7 @@ def _download_buttons(result: dict) -> None:
             )
 
 
-if st.button("🔍 통관 및 인증 분석 실행", type="primary"):
-    if not query.strip():
-        st.warning("질문을 입력해 주세요.")
-    else:
-        with st.spinner("AI 에이전트가 캐시 및 규정을 검토하여 분석을 진행하고 있습니다..."):
-            from pipeline_runner import run_pipeline
-            st.session_state["result"] = run_pipeline(query, use_template=use_template)
-
+# ── 결과 출력부 ──────────────────────────────────────────────────────────
 result = st.session_state.get("result")
 if result:
     status = result.get("status")
