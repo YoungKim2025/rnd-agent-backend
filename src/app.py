@@ -88,7 +88,7 @@ if run_clicked:
     elif query.startswith("연구개발 목적으로 리튬이온"):
         # 💡 API 한도 우회: 기본 입력값일 경우 파이프라인을 건너뛰고 특정 캐시 직접 로드
         import json
-        cache_path = ROOT_DIR.parent / "cache" / "cache_e0f3814a121ab458421f3f5e4d6384ea.json" 
+        cache_path = ROOT_DIR / "cache" / "cache_e0f3814a121ab458421f3f5e4d6384ea.json" 
         if cache_path.exists():
             st.session_state["result"] = json.loads(cache_path.read_text(encoding="utf-8"))
         else:
