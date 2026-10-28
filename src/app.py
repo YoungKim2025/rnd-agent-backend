@@ -1,4 +1,4 @@
-"""Streamlit 화면 (최적화 백엔드 완벽 연동 버전)"""
+"""Streamlit 화면 (모바일 안정성 강화 및 에러 캐시 자동 갱신 버전)"""
 import sys
 from pathlib import Path
 
@@ -9,7 +9,7 @@ sys.path.append(str(ROOT_DIR / "src"))
 
 STAGE_LABELS = {
     "input": "입력 확인",
-    "rule": "사전 규칙 검사",  # 💡 신규: 규칙 차단 시 '알 수 없음' 대신 예쁘게 출력
+    "rule": "사전 규칙 검사",
     "router": "의도 분류",
     "hsk": "HSK 추론",
     "report": "보고서 생성",
@@ -36,14 +36,26 @@ st.sidebar.markdown("""
   3. 수량 한도 검증 + 세액 산출
   4. 메타데이터 RAG 기반 규정 참조 + 사유서 작성
   5. 워드(`.docx`) 및 마크다운(`.md`) 자동 저장
-- **입력 팁**: 품목, 수량, 단가, 수입 목적을 함께 적어 주세요.
 """)
 
-# 💡 신규: 템플릿 모드 제어 토글 추가 (기본값 True)
 use_template = st.sidebar.checkbox(
     "사유서 템플릿 모드 적용\n(체크 시 API 호출 1회로 최적화)", 
     value=True
 )
+
+# 💡 모바일 환경 대응: 캐시 강제 무효화 버튼 추가
+if st.sidebar.button("🧹 에러 캐시 및 세션 초기화"):
+    import shutil
+    cache_dir = ROOT_DIR.parent / "cache"
+    if cache_dir.exists():
+        for f in cache_dir.glob("*.json"):
+            try:
+                f.unlink()
+            except Exception:
+                pass
+    st.session_state.clear()
+    st.success("캐시와 세션이 초기화되었습니다. 다시 시도해 주세요.")
+    st.rerun()
 
 query = st.text_area(
     "수입하고자 하는 품목과 연구개발 목적, 수량, 단가를 자유롭게 입력해 주세요:",
@@ -94,10 +106,8 @@ if st.button("🔍 통관 및 인증 분석 실행", type="primary"):
     if not query.strip():
         st.warning("질문을 입력해 주세요.")
     else:
-        # 💡 수정: 임베딩 지연이 사라졌으므로 스피너 문구 간소화
         with st.spinner("AI 에이전트가 캐시 및 규정을 검토하여 분석을 진행하고 있습니다..."):
             from pipeline_runner import run_pipeline
-            # 💡 수정: UI 토글 상태를 파이프라인에 전달
             st.session_state["result"] = run_pipeline(query, use_template=use_template)
 
 result = st.session_state.get("result")
