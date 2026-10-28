@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 # 1. .env 파일에서 환경변수 로드
 load_dotenv()
 
-# 2. Gemini API 키 설정 (기획서에 명시된 gemini-3.5-flash 모델 사용 준비)
+# 2. Gemini API 키 설정 (기획서에 명시된 gemini-3.8-flash 모델 사용 준비)
 api_key = os.environ.get("GEMINI_API_KEY")
 if not api_key:
     raise ValueError("GEMINI_API_KEY가 설정되지 않았습니다. .env 파일을 확인해주세요.")
@@ -33,8 +33,8 @@ def get_hsk_code(user_query: str) -> str:
     제약사항: 부가적인 설명이나 인사말을 절대 포함하지 말고, 오직 '10자리 숫자(HSK 코드)'만 출력하세요.
     """
     
-    # 모델 인스턴스 생성 (gemini-3.5-flash)
-    model = genai.GenerativeModel('gemini-3.5-flash')
+    # 모델 인스턴스 생성 (gemini-3.8-flash)
+    model = genai.GenerativeModel('gemini-3.8-flash')
     
     # 프롬프트와 사용자 입력을 함께 전달하여 결과 생성
     response = model.generate_content([system_prompt, user_query])

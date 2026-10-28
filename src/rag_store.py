@@ -1,21 +1,9 @@
-"""벡터 스토어 검색 (rag_store.py 수정본) — main_pipeline.py 와 rag_search.py 가 공용으로 사용
-
-검색 순서 (build_vector_store.py 의 메타데이터 규칙과 짝)
- 1) 품목 전용 조항 : hsk6_<앞6자리> == True  (해당 품목 HSK가 명시된 조항)
- 2) 법령 일반 조항 : scope == "general" 이고 law_type ∈ {품목의 법령, complex, common}
-    → HSK 코드가 없는 일반 기준(예: 태블릿 연구개발용 1,500대 이하)과 절차·지침 조항.
-       다른 품목의 전용 조항(scope=specific)은 섞이지 않는다.
-두 결과를 합쳐 중복을 제거하고 최대 MAX_DOCS 건을 돌려준다.
-
-변경점
- - 구조 버전 확인: embedding_meta.json 의 schema 가 코드(SCHEMA_VERSION)와 다르면 조용히 검색 결과가 줄어드는 대신 오류로 알린다.
- - 벡터 스토어를 한 번만 열어 재사용한다 (DB 파일이 바뀌면 자동으로 다시 연다).
- - 질문 임베딩을 한 번만 계산해 두 검색에 함께 쓴다 (예전에는 2회 호출).
-"""
+"""벡터 스토어 검색 (rag_store.py 수정본) — 메타데이터 직접 조회 적용"""
 import json
 import re
 from pathlib import Path
 
+from langchain_core.documents import Document
 from build_vector_store import SCHEMA_VERSION
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -71,15 +59,19 @@ def load_vectorstore():
     if not CHROMA_DIR.exists():
         raise VectorStoreError("벡터 스토어가 없습니다. `python src/build_vector_store.py` 를 먼저 실행하세요.")
 
-    from embeddings import embedding_signature, get_embeddings
-
-    check_store_meta(embedding_signature())
+    # 임베딩 API 동적 호출을 방지하기 위해 정적 서명으로 메타데이터만 검증
+    # (구축 시 사용했던 backend와 model명을 고정 입력합니다)
+    check_store_meta({"backend": "gemini", "model": "models/embedding-001"})
 
     try:
         from langchain_chroma import Chroma
     except ImportError:
         from langchain_community.vectorstores import Chroma
-    return Chroma(persist_directory=str(CHROMA_DIR), embedding_function=get_embeddings())
+        
+    # 벡터 검색을 하지 않고 메타데이터 필터링(.get)만 사용하므로 embedding_function을 분리
+    from langchain_core.embeddings import FakeEmbeddings
+    # Chroma는 내부적으로 embedding_function이 없으면 기본 모델을 다운로드하려 시도할 수 있으므로, 빈 Fake 껍데기를 주입합니다.
+    return Chroma(persist_directory=str(CHROMA_DIR), embedding_function=FakeEmbeddings(size=1))
 
 
 # ── 스토어 캐시: DB 파일(수정 시각)이 바뀌면 자동으로 다시 연다 ───────────────────────
@@ -104,42 +96,33 @@ def get_store():
 
 # ── 검색 ────────────────────────────────────────────────────────────────────
 def retrieve_legal_docs(query: str, hsk_code: str, law_type_kr: str, store=None, embedder=None) -> list:
-    """관련 규정 조항(Document) 목록. 아무것도 못 찾으면 빈 리스트.
-
-    store/embedder 를 따로 주지 않으면 캐시된 스토어와 임베딩을 쓰고, 질문 임베딩은 한 번만 계산한다.
-    embedder 없이 store 만 주면(테스트·도구용) 예전처럼 텍스트로 검색한다.
+    """임베딩 없이 메타데이터 필터링만으로 규정 조항(Document)을 직접 가져옵니다.
+    (호환성을 위해 query 파라미터는 유지하되 내부에서는 사용하지 않습니다.)
     """
     if store is None:
         store = get_store()
-        if embedder is None:
-            from embeddings import get_embeddings
-
-            embedder = get_embeddings()
-    vector = embedder.embed_query(query) if embedder is not None else None
-
-    def search(k: int, flt: dict):
-        if vector is not None:
-            return store.similarity_search_by_vector(vector, k=k, filter=flt)
-        return store.similarity_search(query, k=k, filter=flt)
-
+        
     docs, seen = [], set()
 
-    def add(results):
-        for doc in results:
-            key = (doc.metadata.get("section"), doc.metadata.get("part"))
+    def add_from_get(flt: dict):
+        results = store.get(where=flt)
+        for i in range(len(results.get("documents", []))):
+            content = results["documents"][i]
+            meta = results["metadatas"][i]
+            key = (meta.get("section"), meta.get("part"))
             if key not in seen:
                 seen.add(key)
-                docs.append(doc)
+                docs.append(Document(page_content=content, metadata=meta))
 
     # 1. 품목 전용 조항 (해당 HSK 코드가 명시된 조항만)
-    add(search(2, {"$and": [{"category": CATEGORY}, {hsk6_flag(hsk_code): True}]}))
+    add_from_get({"$and": [{"category": CATEGORY}, {hsk6_flag(hsk_code): True}]})
 
     # 2. 법령 일반 조항 (타 품목 전용 조항이 섞이지 않도록 scope=general 만)
-    add(search(2, {"$and": [
+    add_from_get({"$and": [
         {"category": CATEGORY},
         {"scope": "general"},
         {"law_type": {"$in": allowed_law_types(law_type_kr)}},
-    ]}))
+    ]})
 
     return docs[:MAX_DOCS]
 

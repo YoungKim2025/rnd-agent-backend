@@ -1,10 +1,4 @@
-"""Streamlit 화면 (app.py 대체본)
-
-변경점
- - 보고서의 '확인이 필요한 사항'(단가 가정, 수량 한도 미등록, 목적 미확인 등)을 화면 상단에 경고로 표시
- - 사이드바 설명을 실제 동작(기본세율 기준, 원산지증명서 입력 시 FTA 반영, 단가 입력)에 맞게 수정
- - 그 외 구조(run_pipeline 호출, session_state 보관, 단계별 실패 표시)는 이전과 동일
-"""
+"""Streamlit 화면 (최적화 백엔드 완벽 연동 버전)"""
 import sys
 from pathlib import Path
 
@@ -15,6 +9,7 @@ sys.path.append(str(ROOT_DIR / "src"))
 
 STAGE_LABELS = {
     "input": "입력 확인",
+    "rule": "사전 규칙 검사",  # 💡 신규: 규칙 차단 시 '알 수 없음' 대신 예쁘게 출력
     "router": "의도 분류",
     "hsk": "HSK 추론",
     "report": "보고서 생성",
@@ -36,15 +31,19 @@ st.markdown(
 st.sidebar.header("📌 데모 안내")
 st.sidebar.markdown("""
 - **처리 단계**:
-  1. 질문 의도 분류 (통관·인증 / 연구실 안전 / 기타)
+  1. 사전 규칙 검사 (상업용, 단가 오류 즉시 차단)
   2. HSK 코드 추론 (로컬 품목표 후보군 중 선택)
-  3. 수량 한도 검증 + 세액 산출 (기본세율 기준, 원산지증명서를 입력하면 FTA 세율 반영)
-  4. ChromaDB RAG 기반 규정 참조 + 사유서 작성
+  3. 수량 한도 검증 + 세액 산출
+  4. 메타데이터 RAG 기반 규정 참조 + 사유서 작성
   5. 워드(`.docx`) 및 마크다운(`.md`) 자동 저장
-- **입력 팁**: 품목, 수량(`25개`), 단가(`개당 5천원`), 수입 목적(연구개발 등)을 함께 적어 주세요.
-  단가를 쓰지 않으면 가정값으로 계산하고 보고서에 표시합니다.
-- **지원 품목**: `data/tariff_rates.csv`에 등록된 품목
+- **입력 팁**: 품목, 수량, 단가, 수입 목적을 함께 적어 주세요.
 """)
+
+# 💡 신규: 템플릿 모드 제어 토글 추가 (기본값 True)
+use_template = st.sidebar.checkbox(
+    "사유서 템플릿 모드 적용\n(체크 시 API 호출 1회로 최적화)", 
+    value=True
+)
 
 query = st.text_area(
     "수입하고자 하는 품목과 연구개발 목적, 수량, 단가를 자유롭게 입력해 주세요:",
@@ -95,10 +94,11 @@ if st.button("🔍 통관 및 인증 분석 실행", type="primary"):
     if not query.strip():
         st.warning("질문을 입력해 주세요.")
     else:
-        # 최초 실행 시 모듈 로드 시간을 감안한 스피너 문구로 변경
-        with st.spinner("AI 엔진을 초기화하고 분석을 진행하고 있습니다. (최초 1회 수 초 소요)..."):
-            from pipeline_runner import run_pipeline  # 지연 로딩 (Lazy Loading)
-            st.session_state["result"] = run_pipeline(query)
+        # 💡 수정: 임베딩 지연이 사라졌으므로 스피너 문구 간소화
+        with st.spinner("AI 에이전트가 캐시 및 규정을 검토하여 분석을 진행하고 있습니다..."):
+            from pipeline_runner import run_pipeline
+            # 💡 수정: UI 토글 상태를 파이프라인에 전달
+            st.session_state["result"] = run_pipeline(query, use_template=use_template)
 
 result = st.session_state.get("result")
 if result:

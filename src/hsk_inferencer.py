@@ -128,17 +128,13 @@ def infer_hsk_code(query: str) -> dict:
     }
 
 if __name__ == "__main__":
-    test_queries = [
-        "연구용으로 쓸 안드로이드 태블릿 PC 3대 통관할 건데",
-        "연구용으로 리튬이온배터리 50개 들여오려고 해",
-        "프랑스산 와인 10병 수입할 때 관세가 얼마야?",
-    ]
-    for q in test_queries:
-        print(f"\n[질문] {q}")
-        res = infer_hsk_code(q)
-        if res["status"] == "success":
-            d = res["data"]
-            print(f"[성공] {d['hsk_code']} ({d['item_name']}) / 신뢰도 {d['confidence']:.2f} / 방식 {d['resolved_from']}")
-            print(f"       근거: {d['reason']}")
-        else:
-            print(f"[실패] {res['message']}")
+    import sys
+    query = " ".join(sys.argv[1:]) or "연구개발 목적으로 리튬이온 배터리 프로토타입 100개를 수입하려고 해. 개당 가격은 5천원이고 인증은 아직 없어. 전안법 면제 조건과 관세율 알려줘."
+    print(f"\n[질문] {query}")
+    res = infer_hsk_code(query)
+    if res["status"] == "success":
+        d = res["data"]
+        print(f"[성공] {d['hsk_code']} ({d['item_name']}) / 신뢰도 {d['confidence']:.2f} / 방식 {d['resolved_from']}")
+        print(f"       근거: {d['reason']}")
+    else:
+        print(f"[실패] {res['message']}")

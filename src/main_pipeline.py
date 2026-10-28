@@ -63,9 +63,10 @@ def won(value: int) -> str:
     return f"₩{value:,}"
 
 # ── RAG ─────────────────────────────────────────────────────────────────────
-def retrieve_context(query: str, hsk_code: str, law_type_kr: str):
+def retrieve_context(hsk_code: str, law_type_kr: str):
     from rag_store import format_context, retrieve_legal_docs, source_labels
-    docs = retrieve_legal_docs(query, hsk_code, law_type_kr)
+    # 임베딩이 제거되었으므로 query 파라미터는 빈 문자열로 전달합니다.
+    docs = retrieve_legal_docs("", hsk_code, law_type_kr)
     return format_context(docs), source_labels(docs)
 
 # ── 사유서 본문 ─────────────────────────────────────────────────────────────
@@ -95,7 +96,6 @@ def _reason_is_safe(text: str, law_basis: str, qty_check: dict, law_type: str) -
     if qty_check["state"] != "within" and "충족" in re.sub(r"충족\s*여부", "", text):
         return False  
     
-    # 💡 신규: 전안법 제9조(표시), 제11조(취소) 오인용 강제 차단 방어막
     if law_type in ("전안법", "복합"):
         if "제9조" in text or "제11조" in text:
             return False
@@ -158,7 +158,6 @@ def build_report_markdown(*, query, tariff_info, quantity, purpose, tax, price_n
         exemption_md = ("> 수입 목적(연구개발 등)이 입력에서 확인되지 않아 면제 사유서 본문을 작성하지 않았습니다. "
                         "수입 목적을 포함해 다시 입력해 주세요.\n")
                         
-    # 💡 신규: RAG 참조문헌과 하드코딩 URL 병합
     source_md = "\n".join(f"- {s}" for s in sources) if sources else "- (참조된 사내 규정 문서 없음)"
     law_links = get_law_reference_links(tariff_info.get("law_type", ""))
     if law_links:
@@ -253,7 +252,6 @@ def save_to_docx(*, query, tariff_info, quantity, purpose, tax, price_note, qty_
     for item in ("면제 확인(신청)서", "연구개발계획서 및 시제품 활용 사유서", "화물송장(Commercial Invoice)"):
         doc.add_paragraph(item, style="List Number")
 
-    # 💡 신규: Docx 파일에도 법령 원문 및 URL 삽입
     doc.add_heading("5. 참조한 규정 및 법령 원문", level=2)
     for source in sources or ["(참조된 사내 규정 문서 없음)"]:
         doc.add_paragraph(source, style="List Bullet")
@@ -294,7 +292,6 @@ def generate_fast_track_report(query: str, hsk_hint: str) -> dict:
     tariff_info = dict(tariff_info)
     tariff_info["law_basis"] = tariff_info.get("law_basis") or tariff_info["law_title"]
 
-    # 단가
     price = extract_unit_price(query, quantity)
     if price["status"] == "foreign":
         return {"status": "error", "message": "외화 단가가 입력되었습니다. 적용 환율을 알 수 없어 계산하지 않았습니다. 원화로 환산한 단가(예: '개당 130만원')로 다시 입력해 주세요."}
@@ -308,30 +305,28 @@ def generate_fast_track_report(query: str, hsk_hint: str) -> dict:
         price_note = "단가 미입력 — 가정값"
         warnings.append(f"단가가 입력되지 않아 가정값 {won(DEFAULT_UNIT_PRICE_KRW)}으로 계산했습니다. 세액은 실제 단가(CIF 기준 과세가격)로 다시 산출해야 합니다.")
 
-    # 수량 한도
     qty_check = check_quantity(quantity, tariff_info.get("limit_quantity", 0), tariff_info.get("law_type", ""), is_qc_purpose(query))
     if qty_check["state"] == "exceeded":
         return {"status": "error", "message": qty_check["message"]}
     if qty_check["state"] == "unregistered":
         warnings.append(qty_check["message"])
 
-    # 세액 (FTA 는 C/O 보유를 밝힌 경우에만 적용)
     fta_applied = mentions_origin_cert(query)
     if fta_applied:
         warnings.append("원산지증명서 보유로 입력되어 FTA 협정세율을 적용했습니다. 협정별 원산지 결정 기준 충족 여부는 별도 확인이 필요합니다.")
     tax = build_tax_scenarios(tariff_info["base_rate_val"], tariff_info["fta_rate_val"], quantity, unit_price, fta_applied)
 
-    # 규정 검색 + 사유서 (수입 목적이 확인된 경우에만)
     reason, sources, rag_context = "", [], ""
     if purpose == "research":
         try:
-            rag_context, sources = retrieve_context(query, tariff_info["hsk_code"], tariff_info.get("law_type", ""))
+            # 💡 수정됨: 더 이상 임베딩 검색에 사용하지 않는 query 전달 생략
+            rag_context, sources = retrieve_context(tariff_info["hsk_code"], tariff_info.get("law_type", ""))
             if not rag_context:
                 warnings.append("관련 규정 조항을 찾지 못해 규정 발췌 없이 사유서를 작성했습니다.")
-        except Exception as exc:  # noqa: BLE001 - 벡터 스토어 없음/임베딩 불일치 등
+        except Exception as exc: 
             print(f"[경고] 규정 검색 실패: {type(exc).__name__}: {exc}")
             warnings.append("규정 검색에 실패해 규정 발췌 없이 사유서를 작성했습니다. (벡터 스토어를 확인하세요)")
-        # 💡 신규: law_type 전달
+        
         reason = generate_rich_reason(tariff_info["item_name"], quantity, tariff_info["law_basis"], rag_context, qty_check, tariff_info.get("law_type", ""))
     else:
         warnings.append("수입 목적(연구개발 등)이 입력에서 확인되지 않아 면제 사유서 본문은 작성하지 않았습니다.")
@@ -341,7 +336,7 @@ def generate_fast_track_report(query: str, hsk_hint: str) -> dict:
     report_md = build_report_markdown(**fields)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = f"{datetime.datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:6]}"  # 같은 초에 여러 요청이 와도 겹치지 않음
+    stamp = f"{datetime.datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:6]}" 
     md_path = OUTPUT_DIR / f"tariff_report_{stamp}.md"
     docx_path = OUTPUT_DIR / f"tariff_report_{stamp}.docx"
     md_path.write_text(report_md, encoding="utf-8")
@@ -361,7 +356,7 @@ def generate_fast_track_report(query: str, hsk_hint: str) -> dict:
 
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")  # Windows(cp949) 콘솔에서 한글 출력 오류 방지
+        sys.stdout.reconfigure(encoding="utf-8")
     from pipeline_runner import run_pipeline
 
     result = run_pipeline(" ".join(sys.argv[1:]) or "연구개발 목적으로 리튬이온 배터리 프로토타입 25개를 수입하려고 해. 개당 5천원이야.")

@@ -19,3 +19,6 @@ vector_store.old/
 *.docx
 평가_SET_사용안내.md
 CHANGES2.md
+
+# 런타임 캐시 및 보고서 데이터
+cache/
