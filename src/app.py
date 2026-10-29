@@ -238,13 +238,16 @@ if result:
         _show_warnings(result)
         _show_meta(result)
         st.markdown("---")
+        
+        # 👇 추가된 이미지 출력 코드
+        report_icon = ROOT_DIR / "AI_Agent_보고서.png"
+        if report_icon.exists():
+            st.image(str(report_icon), width=80)
+            
         st.markdown(result["report_markdown"])
         if result.get("docx_path") and Path(result["docx_path"]).exists():
             st.info(f"📂 생성된 파일은 서버의 `output/` 폴더에 저장되었습니다. (경로: {result['docx_path']})")
         _download_buttons(result)
-    elif status == "unsupported":
-        st.info(result.get("message", "지원하지 않는 질문입니다."))
-        _show_meta(result)
     else:
         message = result.get("message", "알 수 없는 오류")
         if result.get("error_kind") in TRANSIENT_KINDS:

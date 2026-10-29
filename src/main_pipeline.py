@@ -164,7 +164,7 @@ def build_report_markdown(*, query, tariff_info, quantity, purpose, tax, price_n
         source_md += "\n\n**[국가법령정보센터 공식 원문 및 URL]**\n"
         source_md += "\n".join(f"- {link}" for link in law_links)
 
-    return f"""## 🚀 R&D 패스트트랙 통관 및 세액 산출 보고서
+    return f"""## R&D 패스트트랙 통관 및 세액 산출 보고서
 
 > **[사용자 원본 요청]** "{query}"
 
