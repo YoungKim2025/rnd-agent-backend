@@ -1,24 +1,39 @@
-# Security
+# ── 비밀 값 (절대 올리지 않는다) ─────────────────────────────────────────────
 .env
+.streamlit/secrets.toml
+claude_desktop_config_backup.json
 
-# Python
+# ── Python / 가상환경 ───────────────────────────────────────────────────────
 __pycache__/
 *.pyc
+.venv/
+venv/
 
-# Local Test Outputs & Archives
+# ── 실행 중 생기는 파일 ─────────────────────────────────────────────────────
+cache/
+.run_cache/
 output/
-archive/
 vector_store.tmp/
 vector_store.old/
 
-# OS Files
+# ── 백업·보관 폴더 ──────────────────────────────────────────────────────────
+archive/
+Backup_*/
+
+# ── OS · 편집기 임시 파일 ───────────────────────────────────────────────────
 .DS_Store
-# Local Test Scripts & Documents (업로드 제외)
+Thumbs.db
+~$*
+~WRL*.tmp
+*.tmp
+.idea/
+.vscode/
+
+# ── 로컬 전용 스크립트·문서 (업로드 제외) ───────────────────────────────────
 *.bat
 *.ps1
 *.docx
 평가_SET_사용안내.md
 CHANGES2.md
 
-# 런타임 캐시 및 보고서 데이터
-cache/
+# 올려야 하는 것 (참고): vector_store/ (규정 검색용 DB), demo/ (시연 결과), data/, src/, AI_Agent_icon.png, requirements.txt
