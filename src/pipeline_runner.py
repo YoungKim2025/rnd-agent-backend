@@ -289,7 +289,7 @@ def run_pipeline(query: str, use_template: bool = True) -> dict:
             return _fail("router", message, error_kind=_kind_from_message(message), route=route_info)
 
     if route_info["category"] == LAB_SAFETY:
-        return _fail("router", "연구실 안전 문의는 아직 지원하지 않습니다(Phase 2 예정).", status="unsupported", route=route_info)
+        return _fail("router", "연구실 안전 문의는 아직 지원하지 않습니다.", status="unsupported", route=route_info)
     if route_info["category"] != CUSTOMS:
         return _fail("router", "수입 통관·인증과 관련된 질문이 아닙니다.", status="unsupported", route=route_info)
 
